@@ -28,4 +28,9 @@
 *.app
 
 # Arduino build area
-Release/*
+*/Release/*
+ColorFall/.ino.cpp
+
+*.prefs
+
+ColorFall/.settings/org.eclipse.cdt.core.prefs
