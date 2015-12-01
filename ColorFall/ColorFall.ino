@@ -21,12 +21,12 @@
 
 #define NODE_COUNT 39
 
-#define NUM_ANIMS 5
+#define NUM_ANIMS 7
 
 #define TRUE 1
 #define FALSE 0
 
-#define max_t2 300
+int max_t2=25;
 
 //GLOBALS
 int currentAnimation = 0;
@@ -47,6 +47,8 @@ int nodeMap[NUMX][NUMY] = { { 1, 2, 3, 4, -1, -1, -1, -1, -1 }, { 5, 6, 7, 8, 9,
 byte hueMap[NUMX][NUMY];
 byte satMap[NUMX][NUMY];
 byte brightMap[NUMX][NUMY];
+
+unsigned long current;
 
 BlinkM blinkm = BlinkM();
 
@@ -94,8 +96,8 @@ boolean randomize = true;
 boolean doAnimate = true;
 boolean doTransition = false;
 unsigned long startTime = 0;
-unsigned long animationDuration = 30000;
-unsigned long transitionDuration = 10000;
+unsigned long animationDuration = 45000;
+unsigned long transitionDuration = 8000;
 
 void loop() {
 	t1++;
@@ -105,10 +107,9 @@ void loop() {
 			t2 = max_t2;
 			toggleLed();
 			loopCommand();
-			if (debug) {
-				Serial.print(".");
-			}
-
+//			if (debug && t2%5 == 0) {
+//				Serial.print(".");
+//			}
 			if (doAnimate) {
 				renderAnimation();
 			}
@@ -134,7 +135,6 @@ void renderAnimation() {
 		if (debug) {
 			dumpDebug();
 		}
-
 	}
 
 	switch (currentAnimation) {
@@ -142,23 +142,65 @@ void renderAnimation() {
 		renderRainbow();
 		break;
 	case 1:
-		//Thunderstorm
-		renderLightScriptAnimation(16);
+		//Red Green Blue
+		renderLightScriptAnimation(1, 0);
 		break;
 	case 2:
-		//Mood lamp
-		renderLightScriptAnimation(11);
+		//Thunderstorm
+		renderLightScriptAnimation(16, 0);
 		break;
 	case 3:
-		//red flash
-		renderLightScriptAnimation(3);
+		//Hue cycle
+		if (startTime == 0) {
+			modifyFadeSpeed(25);
+		}
+		renderLightScriptAnimation(10, 0);
 		break;
 	case 4:
+		//Mood lamp
+		if (startTime == 0) {
+			modifyFadeSpeed(80);
+		}
+		renderLightScriptAnimation(11, 0);
+		break;
+	case 5:
+		//color flash
+		//renderLightScriptAnimation(3, 0);
+		renderMultiFlash();
+		break;
+	case 6:
 		//morse code white
-		renderLightScriptAnimation(18);
+		renderLightScriptAnimation(18, 0);
 		break;
 	}
 
+}
+
+void renderMultiFlash() {
+	current = millis();
+	if (startTime == 0) {
+		startTime = millis();
+		randomSeed(analogRead(0));
+		// Scripts 2-8 are flashing different colors
+		for (int x = 0; x < NUMX; x++) {
+			for (int y = 0; y < NUMY; y++) {
+				int currentNode = nodeMap[x][y];
+				if (currentNode > 0) {
+					int randomFlashScript = random(7) + 2;
+					Serial.println(randomFlashScript, DEC);
+					blinkm.playScript(randomFlashScript, 0, 0, currentNode);
+				}
+			}
+		}
+
+	}
+
+	if (startTime + animationDuration < current) {
+		doAnimate = false;
+		doTransition = true;
+		startTime = 0;
+		blinkm.stopScript(0);
+	}
 }
 
 int currentTransition = 0;
@@ -170,12 +212,12 @@ void renderTransition() {
 }
 
 void renderFadeTransition(byte red, byte green, byte blue, byte fadespeed) {
-	unsigned long current = millis();
+	current = millis();
 
 	if (startTime == 0) {
 		startTime = millis();
 		initNodes();
-		blinkm.setFadeSpeed(0, fadespeed);
+		blinkm.setFadeSpeed(fadespeed, 0);
 		blinkm.fadeToRGB(red, green, blue, 0);
 	}
 
@@ -190,8 +232,8 @@ void renderFadeTransition(byte red, byte green, byte blue, byte fadespeed) {
 
 //Simply tells all nodes to play the specified light script for the full duration of the animation cycle.
 
-void renderLightScriptAnimation(byte script_id) {
-	unsigned long current = millis();
+void renderLightScriptAnimation(byte script_id, byte addr) {
+	current = millis();
 	if (startTime == 0) {
 		startTime = millis();
 
@@ -214,10 +256,10 @@ void resetAnimation() {
 }
 
 float offset = 0;
-float length = 1.5;
+float length = 2;
 
 void renderRainbow() {
-	unsigned long current = millis();
+	current = millis();
 	if (startTime == 0) {
 		startTime = millis();
 		initNodes();
@@ -237,7 +279,7 @@ void renderRainbow() {
 
 	//If you add, the rainbow goes up.
 	//if you subtract, the rainbow goes down.
-	offset = offset - 0.1;
+	offset = offset - 0.08;
 	renderBuffer();
 }
 
@@ -276,7 +318,7 @@ void renderBuffer() {
 }
 
 void help() {
-	Serial.println("\r\nBlinkM Controller!\n"
+	Serial.println("\r\nColorfall!\n"
 			"'s <num>' -- start running animation <num>\n"
 			"'f <num> -- set fade speed ( 0 - 255 ) \n"
 			"'a <num> -- set time adjust ( -255 - 255 | 0 to turn off )\n");
@@ -354,6 +396,12 @@ void loopCommand() {
 		Serial.println(num);
 		setTimeAdj(num);
 		break;
+	case 'm':
+		Serial.print("Setting maxt2 to: ");
+		Serial.println(num);
+		max_t2 = num;
+		break;
+
 	default:
 		Serial.println(" unknown cmd");
 	}
