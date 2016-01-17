@@ -17,7 +17,7 @@ const bool reportVCC = false;
 DHT dht(DHTPIN, DHTTYPE);
 
 const char* ssid     = "Tundra";
-const char* password = "ozzybird";
+const char* password = "*******";
 
 const char* apikey = "ZGL7TFM1VVCTEM3S"; 
 const char* host = "api.thingspeak.com";
