@@ -22,9 +22,14 @@
 #define NODE_COUNT 39
 
 #define NUM_ANIMS 7
+#define NUM_TRANSITIONS 2
 
 #define TRUE 1
 #define FALSE 0
+
+#define DEFAULT_FADE_SPEED 255
+#define DEFAULT_TIME_ADJUST 0
+#define MAX_TRIES 10
 
 int max_t2=25;
 
@@ -44,9 +49,18 @@ int nodeMap[NUMX][NUMY] = { { 1, 2, 3, 4, -1, -1, -1, -1, -1 }, { 5, 6, 7, 8, 9,
 		19, 20, 21, 22, -1, -1 }, { 23, 24, 25, 26, 27, 28, 29, 30, -1 }, { 31,
 		32, 33, 34, 35, 36, 37, 38, 39 } };
 
+//Time for an object to fall 2 meters, in increments of 10cm
+//Basically a snapshot of (t=sqrt{2d/g}) where g=9.8 m/s^2
+int gravityDelays[10] = {202,84,64,54,48,43,40,37,35,33};
+
 byte hueMap[NUMX][NUMY];
 byte satMap[NUMX][NUMY];
 byte brightMap[NUMX][NUMY];
+
+byte redMap[NUMX][NUMY];
+byte greenMap[NUMX][NUMY];
+byte blueMap[NUMX][NUMY];
+byte red,green,blue;
 
 unsigned long current;
 
@@ -92,9 +106,11 @@ void initNodes() {
 	}
 }
 
+//Our starting state.
 boolean randomize = true;
 boolean doAnimate = true;
 boolean doTransition = false;
+
 unsigned long startTime = 0;
 unsigned long animationDuration = 45000;
 unsigned long transitionDuration = 8000;
@@ -107,9 +123,6 @@ void loop() {
 			t2 = max_t2;
 			toggleLed();
 			loopCommand();
-//			if (debug && t2%5 == 0) {
-//				Serial.print(".");
-//			}
 			if (doAnimate) {
 				renderAnimation();
 			}
@@ -123,18 +136,33 @@ void loop() {
 
 }
 
+
 //Render a single frame of whatever animation is currently selected.
 void renderAnimation() {
 
 	//If we starting a new animation cycle, pick a random animation
 	if (startTime == 0) {
 		if (randomize) {
-			randomSeed(analogRead(0));
-			currentAnimation = random(NUM_ANIMS);
+			randomSeed(analogRead(1));
+			int newAnim = -1;
+			int i;
+			//Try up to MAX_TRIES to not repeat animations.
+			for( i=0; i < MAX_TRIES; i++) {
+				newAnim = random(NUM_ANIMS);
+				if ( newAnim != currentAnimation ) {
+					currentAnimation = newAnim;
+					break;
+				}
+			}
+
+			if(i > 0) {
+				Serial.print("Took tries: ");
+				Serial.println(i,DEC);
+			}
 		}
-		if (debug) {
-			dumpDebug();
-		}
+//		if (debug) {
+//			dumpDebug();
+//		}
 	}
 
 	switch (currentAnimation) {
@@ -187,7 +215,6 @@ void renderMultiFlash() {
 				int currentNode = nodeMap[x][y];
 				if (currentNode > 0) {
 					int randomFlashScript = random(7) + 2;
-					Serial.println(randomFlashScript, DEC);
 					blinkm.playScript(randomFlashScript, 0, 0, currentNode);
 				}
 			}
@@ -203,12 +230,100 @@ void renderMultiFlash() {
 	}
 }
 
-int currentTransition = 0;
+int currentTransition = 1;
 //Render a single frame of whatever transition is currently selected.
 void renderTransition() {
-	if (currentTransition == 0) {
-		renderFadeTransition(0, 0, 0, 2);
+	//If we starting a new transition, pick a random transition
+	if (startTime == 0) {
+		randomSeed(analogRead(0));
+		currentTransition = random(NUM_TRANSITIONS);
 	}
+
+	switch (currentTransition) {
+		case 0:
+			renderFadeTransition(0, 0, 0, 2);
+			break;
+		case 1:
+			renderDropOutTransition(15);
+			break;
+	}
+}
+
+void copyArrayColorToRGBBuffer() {
+	//Read the current state of the blinkms.
+	for (int x = 0; x < NUMX; x++) {
+		for (int y = 0; y < NUMY; y++) {
+			if ( nodeMap[x][y] > 0 ) {
+				blinkm.getRGBColor(&red,&green,&blue,nodeMap[x][y]);
+//				if(debug) {
+//					Serial.print("nodeMap[");
+//					Serial.print(x);
+//					Serial.print(",");
+//					Serial.print(y);
+//					Serial.print("] = ");
+//					Serial.print(nodeMap[x][y]);
+//					Serial.print(" = RGB (");
+//					Serial.print(red);
+//					Serial.print(", ");
+//					Serial.print(green);
+//					Serial.print(", ");
+//					Serial.print(blue);
+//					Serial.println(")");
+//				}
+				redMap[x][y] = red;
+				greenMap[x][y] = green;
+				blueMap[x][y] = blue;
+			}
+		}
+	}
+}
+
+
+int transitionStep = 0;
+void renderDropOutTransition(byte fadespeed){
+	//Starting at the bottom, copy the color value from the node above
+	//If there's no node above, then set yourself to black
+	current = millis();
+
+	if (startTime == 0) {
+		startTime = millis();
+		initNodes();
+		copyArrayColorToRGBBuffer();
+	}
+
+	if( transitionStep < 10 ) {
+		delay(gravityDelays[transitionStep]*2);
+
+		//set the transition step blinkms to black
+		for (int x = 0; x < NUMX; x++) {
+			if ( nodeMap[x][transitionStep] > 0 ) {
+				//Fade to black slowly
+				blinkm.setFadeSpeed(fadespeed, nodeMap[x][transitionStep]);
+				blinkm.fadeToHSB(0,0,0,nodeMap[x][transitionStep]);
+			}
+		}
+
+		for (int y = (transitionStep+1); y < NUMY; y++) {
+			for (int x = 0; x < NUMX; x++) {
+				if ( nodeMap[x][y] > 0 ) {
+					//Fade to color instantly
+					blinkm.setFadeSpeed(255, nodeMap[x][y]);
+					blinkm.fadeToRGB(redMap[x][y-transitionStep],greenMap[x][y-transitionStep],blueMap[x][y-transitionStep],nodeMap[x][y]);
+				}
+			}
+		}
+	}
+	transitionStep++;
+
+	if (startTime + transitionDuration < current) {
+		doAnimate = true;
+		doTransition = false;
+		startTime = 0;
+		transitionStep = 0;
+		//Reset the fadespeed back to default.
+		modifyFadeSpeed(DEFAULT_FADE_SPEED);
+	}
+
 }
 
 void renderFadeTransition(byte red, byte green, byte blue, byte fadespeed) {
@@ -226,7 +341,7 @@ void renderFadeTransition(byte red, byte green, byte blue, byte fadespeed) {
 		doTransition = false;
 		startTime = 0;
 		//Reset the fadespeed back to default.
-		blinkm.setFadeSpeed(currentFadeSpeed, 0);
+		modifyFadeSpeed(DEFAULT_FADE_SPEED);
 	}
 }
 
@@ -257,12 +372,22 @@ void resetAnimation() {
 
 float offset = 0;
 float length = 2;
+byte curSaturation = 255;
 
 void renderRainbow() {
 	current = millis();
 	if (startTime == 0) {
 		startTime = millis();
 		initNodes();
+		int analogValue = analogRead(1);
+		randomSeed(analogValue);
+		//One third of the time select a more pastel saturation
+		if ( random(3) == 1){
+			curSaturation = random(55) + 200;
+		}
+		else {
+			curSaturation = 255;
+		}
 		modifyFadeSpeed(255);
 		setTimeAdj(0);
 		offset = 0;
@@ -287,9 +412,13 @@ void fillBufferWithSine(float offset, float length, int fillX) {
 	float stepSize = length / NUMY;
 	for (int Y = 0; Y < NUMY; Y++) {
 		hueMap[fillX][Y] = (sin(offset + (Y * stepSize)) + 1) * 127.6;
+		//I want the saturation to ramp up over the timespan of the animation.
+		//		int calculatedSaturation = (int)(((current - startTime) / ( animationDuration / 100 )) * 2.55);
+		satMap[fillX][Y] = curSaturation;
 //		if (debug && fillX == 0 && Y == 0) {
-//			Serial.print(" setting buffer to hue: ");
-//			Serial.println(hueMap[fillX][Y], DEC);
+//			Serial.print(hueMap[fillX][Y], DEC);
+//			Serial.print(" | ");
+//			Serial.println(satMap[fillX][Y], DEC);
 //		}
 	}
 }
@@ -306,10 +435,10 @@ void setBufferToHSB(byte h, byte s, byte b) {
 
 void renderBuffer() {
 	for (int x = 0; x < NUMX; x++) {
+
 		for (int y = 0; y < NUMY; y++) {
 			int currentNode = nodeMap[x][y];
 			if (currentNode > 0) {
-//        Serial.println(currentNode);
 				blinkm.fadeToHSB(hueMap[x][y], satMap[x][y], brightMap[x][y],
 						currentNode);
 			}
@@ -400,6 +529,11 @@ void loopCommand() {
 		Serial.print("Setting maxt2 to: ");
 		Serial.println(num);
 		max_t2 = num;
+		break;
+	case 'S':
+		Serial.print("Setting sat to: ");
+		Serial.println(num);
+		curSaturation = num;
 		break;
 
 	default:

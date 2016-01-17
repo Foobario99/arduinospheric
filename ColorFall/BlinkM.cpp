@@ -299,18 +299,17 @@ void BlinkM::fadeToRandomHSB(byte hrnd, byte srnd, byte brnd)
 }
 
 // Gets current RGB value being displayed
-void BlinkM::getRGBColor(byte* r, byte* g, byte* b)
+void BlinkM::getRGBColor(byte* r, byte* g, byte* b, byte naddr)
 {
-    Wire.beginTransmission(addr);
+    Wire.beginTransmission(naddr);
     Wire.write('g');
     Wire.endTransmission();
-    Wire.requestFrom(addr, (byte)3);
-    while( Wire.available() < 3 ) ;  // FIXME:
-    //if( Wire.available() )  { 
+    Wire.requestFrom(naddr, (byte)3);
+    if( Wire.available() )  {
         *r = Wire.read();
         *g = Wire.read();
         *b = Wire.read();
-        //}
+    }
 }
 
 //

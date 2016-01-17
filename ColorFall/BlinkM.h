@@ -76,7 +76,7 @@ class BlinkM
     void setRGB(byte red, byte grn, byte blu);
     void setRGB(byte red, byte grn, byte blu, byte naddr);
 
-    void getRGBColor(byte* red, byte* grn, byte* blu);
+    void getRGBColor(byte* red, byte* grn, byte* blu, byte naddr);
 
     void fadeToRandomRGB(byte rrnd, byte grnd, byte brnd);
     void fadeToRandomHSB(byte hrnd, byte srnd, byte brnd);
